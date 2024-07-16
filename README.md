@@ -1,8 +1,3 @@
----
-title: 'Linux Heap Exploitation - Part 1'
-disqus: Hackmd
----
-
 # House of force
 
 
