@@ -2,16 +2,13 @@
 title: 'Linux Heap Exploitation - Part 1'
 disqus: hackmd
 ---
-# Table of contents
-[TOC]
 
 # House of force
 
 
 ## Overall
 ![image](https://hackmd.io/_uploads/BJ5ez5Ur0.png)
-:::spoiler
-:::info 
+ 
 **When a program allocates memory from the heap, the operating system allocates a block of physical memory (or a combination of physical and disk memory) and assigns a virtual address to it. This virtual address becomes part of the process's virtual address space and can be used by the program to access the allocated memory.**
 
 - ***Virtual Memory (VA)*** 
@@ -27,7 +24,7 @@ disqus: hackmd
 
 ***In GLIBC versions < 2.29***, top chunk size fields are not subject to any integrity checks during allocations. If a top chunk size field is overwritten using e.g. an overflow and replaced with a large value, subsequent allocations from that top chunk can overlap in-use memory. Very large allocations from a ***corrupted top chunk can wrap around the VA space in GLIBC versions < 2.30***.
 - For example, a top chunk starts at address 0x405000 and target data residing at address 0x404000 in the program’s data section must be overwritten. Overwrite the top chunk size field using a bug, replacing it with the value 0xfffffffffffffff1. Next, calculate the number of bytes needed to move the top chunk to an address just before the target. The total is 0xffffffffffffffff - 0x405000 bytes to reach the end of the VA space, then 0x404000 - 0x20 more bytes to stop just short of the target address. 
-:::
+
 
 ## Approach
 
@@ -37,22 +34,22 @@ disqus: hackmd
 
 ## Further use 
 
-:::success
-- ***If the target resides on the same heap as the corrupt top chunk***, leaking a heap address is not required, the allocation can wrap around the VA space back onto the same heap to an address relative to the top chunk. 
-:::
 
-:::success
+- ***If the target resides on the same heap as the corrupt top chunk***, leaking a heap address is not required, the allocation can wrap around the VA space back onto the same heap to an address relative to the top chunk. 
+
+
+
 - The malloc hook is a viable target for this technique because passing arbitrarily large requests to malloc() is a prerequisite of the House of Force. Overwriting the malloc hook with the address of system(), then passing the address of a “/bin/sh” string to malloc masquerading as the request size becomes the equivalent of system(“/bin/sh”).
-:::
+
  
 
 ## Limitations
-:::warning
+
 - ***GLIBC version 2.29*** introduced a top chunk size field sanity check, which ensures that the top chunk size does not exceed its arena’s system_mem value. 
 - ***GLIBC version 2.30*** introduced a maximum allocation size check, which limits the size of the gap the House of Force can bridge. 
-:::
+
 ## Script
-:::spoiler
+
 
 
 ***overwritetarget.py***
@@ -171,7 +168,7 @@ io.interactive()
 
 
 ```
-:::
+
 
 
 # Fastbin dup
@@ -179,35 +176,33 @@ io.interactive()
 ## Overall 
 ![image](https://hackmd.io/_uploads/HybqwqIHC.png)
 
-:::spoiler
 
-:::info
 - The fastbin double-free check only ensures that a chunk being freed into a fastbin is not already the first chunk in that bin, if a different chunk of the same size is freed between the double-free then the check passes. 
 
 - For example, request chunks A & B, both of which are the same size and qualify for the fastbins when freed, then free chunk A. If chunk A is freed again immediately, the fastbin double-free check will fail because chunk A is already the first chunk in that fastbin. Instead, free chunk B, then free chunk A again. This way chunk B is the first chunk in that fastbin when chunk A is freed for the second time. Now request three chunks of the same size as A & B, malloc will return chunk A, then chunk B, then chunk A again. 
 
 - This may yield an opportunity to read from or write to a chunk that is allocated for another purpose. Alternatively, it could be used to tamper with fastbin metadata, specifically the forward pointer (fd) of the double-freed chunk. This may allow a fake chunk to be linked into the fastbin which can be allocated, then used to read from or write to an arbitrary location. Fake chunks allocated in this way must pass a size field check which ensures their size field value matches the chunk size of the fastbin they are being allocated from. 
 - Watch out for incompatible flags in fake size fields, a set NON_MAIN_ARENA flag with a clear CHUNK_IS_MMAPPED flag can cause a segfault as malloc attempts to locate a non-existent arena. 
-:::
+
 
 ## Approach
 
 Leverage a ***double-free bug*** to coerce malloc into ***returning the same chunk twice***, without freeing it in between. This technique is typically capitalised upon by corrupting fastbin metadata to ***link a fake chunk into a fastbin***. This fake chunk can be allocated, then program functionality could be used to ***read from or write to an arbitrary memory location.***
 ## Further use 
-:::success
+
 ***The malloc hook*** is a good target for this technique, the 3 most-significant bytes of the _IO_wide_data_0 vtable pointer can be used in conjunction with part of the succeeding padding quadword to form a **reliable 0x7f size field.** 
 - **This works because allocations are subject neither to alignment checks nor to flag corruption checks.**  
-:::
+
 
 ## Limitations 
-:::warning
+
 ***The fastbin size field check*** during allocation limits candidates for fake chunks. 
-:::
+
 
 
 
 ## Fastbin dup 1
-:::spoiler
+
 overwrite.py
 ```python=
 from pwn import *
@@ -341,10 +336,10 @@ malloc(0x68, b'a'*19 + p64(libc.address + 0xe1fa1))
 io.interactive()
 
 ```
-:::
+
 ## Fastbin dup 2
 ***This binary challenge doesn't allow request 0x68 size***
-:::spoiler
+
 shell.py
 ```python=
 from pwn import *
@@ -446,15 +441,14 @@ malloc(0x18, b'')
 
 io.interactive()
 ```
-:::
+
 
 # Unsafe unlink
 
 ## Overall
 ![image](https://hackmd.io/_uploads/HJQPakuSC.png)
 
-:::spoiler
-:::info
+
 - ***During chunk consolidation*** the chunk already ***linked into a free list is unlinked from that list*** via the unlink macro. The unlinking process is a reflected ***WRITE*** using the ***chunk’s forward (fd) and backward (bk) pointers***
     - The victim bk is copied over the bk of the chunk pointed to by the victim fd.
     - The victim fd is written over the fd of the chunk pointed to by the victim bk. 
@@ -469,24 +463,24 @@ io.interactive()
     - The shellcode can use a jump instruction to skip the bytes corrupted by the fd. 
     
 **Triggering a call to free() executes the shellcode.** 
-:::
+
 
 ## Approach 
 - Force the unlink macro to process designer-controlled fd/bk pointers, leading to a reflected write. 
 ## Further use 
 
-:::success
+
 It is possible to use a ***prev_size field of 0*** and ***craft the counterfeit fd & bk pointers*** within chunk. The same technique can be applied to forward consolidation but requires stricter heap control.
-:::
+
 ## Limitations 
 
-:::warning
+
 This technique can only be leveraged against ***GLIBC versions <= 2.3.3***, safe unlinking was introduced in GLIBC version 2.3.4 in 2004 and GLIBC versions that old are not common. This technique was originally leveraged against platforms without NX/DEP and is described as such here. In 2003 AMD introduced hardware NX support to their consumer desktop processors, followed by Intel in 2004, systems without this protection are not common.
-:::
+
 
 ## Script
 
-:::spoiler
+
 shell.py
 ```python=
 #!/usr/bin/env python3
@@ -582,14 +576,13 @@ free(chunk_b)
 
 io.interactive()
 ```
-:::
+
 
 # Safe unlink
 ## Overall
 ![image](https://hackmd.io/_uploads/H1ERASuS0.png)
 
-:::spoiler
-:::info
+
 The Safe Unlink technique is similar to the Unsafe Unlink, but accounts for safe unlinking checks introduced in GLIBC version 2.3.4. ***The safe unlinking checks ensure that a chunk is part of a doubly linked list before unlinking it.*** 
     - The checks **PASS** if the ***bk of the chunk pointed to by the victim chunk’s fd points back to the victim chunk***, and the ***fd of the chunk pointed to by the victim’s bk also points back to the victim chunk.*** 
 - Forge a fake chunk starting at the first quadword of a legitimate chunk’s user data, ***point its fd & bk 0x18 and 0x10 bytes respectively before a user data pointer to the chunk in which they reside***. Craft a prev_size field for the succeeding chunk that is 0x10 bytes less than the actual size of the previous chunk. Leverage an ***overflow bug to clear the succeeding chunk’s prev_inuse bit***, when this chunk is freed malloc will attempt to ***consolidate it backwards with the fake chunk***. 
@@ -599,27 +592,27 @@ The Safe Unlink technique is similar to the Unsafe Unlink, but accounts for safe
 
 **If this pointer is used to write data, it may be used to overwrite itself a second time with the address of sensitive data, then be used to tamper with that data.**
 
-:::
+
 
 ## Approach
 
 - The modern equivalent of the Unsafe Unlink technique. Force the unlink macro to process designercontrolled fd/bk pointers, leading to a reflected write. The safe unlinking checks are satisfied by aiming the reflected write at a pointer to an in-use chunk. Program functionality may then be used to overwrite this pointer again, which may in turn be used to read from or write to an arbitrary address. 
 
 ## Further use 
-:::success
+
 By forging a very large prev_size field the consolidation attempt may wrap around the VA space and operate on a fake chunk within the freed chunk. 
-:::
+
 
 ## Limitations 
-:::warning
+
 A size vs prev_size check introduced in GLIBC version 2.26 requires the fake chunk’s size field to pass 
 a simple check; the value at the fake chunk + size field must equal the size field, setting the fake size 
 field to 8 will always pass this check. A 2nd size vs prev_size check introduced in GLIBC version 2.29 
 requires the fake chunk’s size field to match the forged prev_size field.
-:::
+
 
 ## Script
-:::spoiler
+
 overwrite.py
 ```python=
 #!/usr/bin/env python3
@@ -804,7 +797,7 @@ target()
 
 io.interactive()
 ```
-:::
+
 # House of Orange
 
 ***This challenge is in the Linux Heap Exploitation - Part 1, and it is worth to write something about it.***
@@ -832,11 +825,11 @@ Challenge gives me 4 options as the image above.
 
 ### Bug
 
-:::danger
+
 ![image](https://hackmd.io/_uploads/Hk-TQP34C.png)
 
 ***As you see, I can overwrite the heap.***
-:::
+
 
 
 ## Approach
