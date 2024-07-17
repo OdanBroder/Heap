@@ -1,8 +1,3 @@
----
-title: 'The house of Spirit'
-disqus: hackmd
----
-
 # Overall
 ![image](https://hackmd.io/_uploads/HkVo99OS0.png)
 
