@@ -7,7 +7,10 @@ libc = elf.libc
 environ = {"LD_PRELOAD": libc.path}
 
 gs = """
-
+b *main
+b *main+235
+b *main+401
+b *main+503
 """
 index = 0
 

