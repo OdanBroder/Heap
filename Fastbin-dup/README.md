@@ -14,7 +14,7 @@ Leverage a ***double-free bug*** to coerce malloc into ***returning the same chu
 
 ***The malloc hook*** is a good target for this technique, the 3 most-significant bytes of the _IO_wide_data_0 vtable pointer can be used in conjunction with part of the succeeding padding quadword to form a **reliable 0x7f size field.** 
 - **This works because allocations are subject neither to alignment checks nor to flag corruption checks.**  
-- 
+
 # Limitations 
 ***The fastbin size field check*** during allocation limits candidates for fake chunks. 
 
