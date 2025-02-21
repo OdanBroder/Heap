@@ -1,2 +1,1 @@
-# Heap
-Linux Heap Exploitation
+[Linux Heap Exploitation Part 1 (Udemy)](https://www.udemy.com/course/linux-heap-exploitation-part-2/): A comprehensive course on Linux heap exploitation, offering valuable insights into heap vulnerabilities and exploitation techniques.
